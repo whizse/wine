@@ -2505,6 +2505,8 @@ INT CDECL X11DRV_ToUnicodeEx(UINT virtKey, UINT scanCode, const BYTE *lpKeyState
     HWND focus;
     XIC xic;
     Status status = 0;
+    char dead_char = 0;
+    static char last_dead_char = 0;
 
     if (scanCode & 0x8000)
     {
@@ -2652,7 +2654,6 @@ INT CDECL X11DRV_ToUnicodeEx(UINT virtKey, UINT scanCode, const BYTE *lpKeyState
 
     if (ret == 0)
     {
-	char dead_char;
 
 #ifdef XK_EuroSign
         /* An ugly hack for EuroSign: X can't translate it to a character
@@ -2677,7 +2678,16 @@ INT CDECL X11DRV_ToUnicodeEx(UINT virtKey, UINT scanCode, const BYTE *lpKeyState
 	if (dead_char)
         {
 	    MultiByteToWideChar(CP_UNIXCP, 0, &dead_char, 1, bufW, bufW_size);
-	    ret = -1;
+            if (last_dead_char == dead_char)
+            {
+                ret = 1;
+                last_dead_char = 0;
+            }
+            else
+            {
+                ret = -1;
+                last_dead_char = dead_char;
+            }
             goto found;
         }
 
@@ -2781,6 +2791,9 @@ found:
         HeapFree(GetProcessHeap(), 0, lpChar);
 
     LeaveCriticalSection( &kbd_section );
+
+    if (!dead_char)
+        last_dead_char = 0;
 
     /* Null-terminate the buffer, if there's room.  MSDN clearly states that the
        caller must not assume this is done, but some programs (e.g. Audiosurf) do. */
